@@ -5,6 +5,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional, Dict
 import pandas as pd
 from bs4 import BeautifulSoup
+from tqdm.auto import tqdm
 
 @dataclass
 class Car:
@@ -45,31 +46,23 @@ class CrAutosScraper:
 
     @staticmethod
     def _clean_numeric_value(key: str, value: str) -> tuple:
-        """
-        Detecta si el valor es un número (con o sin comas) y una unidad (ej: '91,500 kms').
-        Retorna la tupla (Nuevo Nombre de Columna, Valor Numérico).
-        """
         if not isinstance(value, str):
             return key, value
 
         value = value.strip()
-
-        # Busca un número (con comas opcionales) seguido de letras opcionales
         match = re.match(r'^([\d,]+)\s*([a-zA-Z]*)$', value)
         if match:
-            num_str = match.group(1).replace(',', '') # Quitar comas (91,500 -> 91500)
+            num_str = match.group(1).replace(',', '')
             unit = match.group(2).lower()
 
             try:
                 num_val = int(num_str)
             except ValueError:
-                return key, value # Si falla la conversión, devuelve original
+                return key, value
 
             if unit:
-                # Si hay unidad, la pone en el key: "Kilometraje (kms)"
                 return f"{key} ({unit})", num_val
             else:
-                # Si solo es número (ej. "# de puertas": "5")
                 return key, num_val
 
         return key, value
@@ -111,14 +104,12 @@ class CrAutosScraper:
             try:
                 response = await client.post(self.base_url, data=payload, timeout=20.0)
                 response.raise_for_status()
-                # Forzar decodificación UTF-8 para evitar caracteres extraños
                 html = response.content.decode('utf-8', errors='replace').replace('\n', ' ')
                 results = re.findall(r'<a href="cardetail.cfm\?c=(\d+)">(.*?)<\/a>', html)
                 if not results:
                     return []
                 return self._process_results(results)
-            except Exception as e:
-                print(f"Error en página {page}: {e}")
+            except Exception:
                 return []
 
     async def fetch_car_details(self, client: httpx.AsyncClient, car: Car) -> Dict:
@@ -130,11 +121,9 @@ class CrAutosScraper:
                 response = await client.get(url, timeout=20.0)
                 response.raise_for_status()
 
-                # Forzamos UTF-8 para arreglar "San JosÃ©" -> "San José"
                 html_content = response.content.decode('utf-8', errors='replace')
                 soup = BeautifulSoup(html_content, 'html.parser')
 
-                # Información General (Se omitió deliberadamente la sección de Vendedor)
                 gen_info_tab = soup.find('div', id='tab-1')
                 if gen_info_tab:
                     for row in gen_info_tab.find_all('tr'):
@@ -143,7 +132,6 @@ class CrAutosScraper:
                             key = cols[0].get_text(strip=True)
                             val = cols[1].get_text(strip=True).replace('\xa0', ' ')
                             if key != "Información General":
-                                # Limpiar y transformar a número si aplica
                                 clean_key, clean_val = self._clean_numeric_value(key, val)
                                 data[clean_key] = clean_val
                         elif len(cols) == 1:
@@ -151,27 +139,37 @@ class CrAutosScraper:
                             if text and text != "Información General":
                                 data['Notas'] = text
 
-                # Equipamiento
                 equip_tab = soup.find('div', id='tab-2')
                 if equip_tab:
                     equip_text = equip_tab.get_text(separator="|", strip=True)
                     items = [item.strip() for item in equip_text.split('|') if len(item.strip()) > 2 and item != "Equipamiento"]
                     data['Equipamiento'] = ", ".join(items)
 
-            except Exception as e:
-                print(f"Error obteniendo detalles del carro {car.id}: {e}")
+            except Exception:
+                pass 
 
         return data
 
     async def run(self, total_pages: int):
         async with httpx.AsyncClient(headers=self.headers) as client:
-            print(f"Obteniendo lista de carros de {total_pages} página(s)...")
+            print(f"\n[FASE 1/2] Obteniendo lista base de carros ({total_pages} páginas)...")
             tasks = [self.fetch_page(client, p) for p in range(1, total_pages + 1)]
-            pages_results = await asyncio.gather(*tasks)
+            
+            pages_results = []
+            for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Páginas Procesadas"):
+                pages_results.append(await f)
+                
             all_cars = [car for sublist in pages_results for car in sublist]
 
-            print(f"Se encontraron {len(all_cars)} carros. Extrayendo detalles...")
+            if not all_cars:
+                print("No se encontraron carros. Verifica tu conexión o el rango de páginas.")
+                return pd.DataFrame()
+
+            print(f"\n[FASE 2/2] Se encontraron {len(all_cars)} carros. Extrayendo especificaciones detalladas...")
             detail_tasks = [self.fetch_car_details(client, car) for car in all_cars]
-            detailed_cars = await asyncio.gather(*detail_tasks)
+            
+            detailed_cars = []
+            for f in tqdm(asyncio.as_completed(detail_tasks), total=len(detail_tasks), desc="Carros Extraídos"):
+                detailed_cars.append(await f)
 
             return pd.DataFrame(detailed_cars)
