@@ -1,61 +1,320 @@
 # crautos-scraper
 
-Extractor asíncrono en Python para recopilar información estructurada de vehículos usados en Costa Rica desde crautos.com. 
+Async Python scraper for extracting structured data about used cars in **Costa Rica** from **crautos.com**.
 
-⚠️ DESCARGO DE RESPONSABILIDAD LEGAL Y ÉTICA
-Este proyecto ha sido desarrollado estrictamente con fines educativos, de aprendizaje personal y de investigación. 
-- No está diseñado para realizar ataques de denegación de servicio (DDoS) ni para saturar los servidores del sitio web objetivo.
-- El autor no se hace responsable del mal uso de esta herramienta, ni de las consecuencias derivadas de violar los Términos de Servicio de crautos.com.
-- Se prohíbe el uso de este código y de los datos generados por el mismo para cualquier fin comercial o de lucro.
+This project collects listings from the public catalog and extracts structured vehicle information that can be exported to **CSV or pandas DataFrames** for analysis.
 
-## Características
+The scraper is designed with **asynchronous networking**, **rate limiting**, and **data cleaning utilities**.
 
-- Extracción Asíncrona: Utiliza asyncio y httpx para procesar múltiples páginas concurrentemente, reduciendo el tiempo de ejecución.
-- Limpieza de Datos Integrada: Convierte strings con texto (ej. "91,500 kms") en datos numéricos puros (ej. 91500).
-- Manejo de Codificación: Resuelve problemas de caracteres especiales forzando la decodificación UTF-8.
-- Exportación a CSV: Genera automáticamente un DataFrame de pandas y lo exporta a un archivo CSV.
+---
 
-## Requisitos e Instalación
+# Legal and Ethical Disclaimer
 
-1. Asegúrate de tener Python 3.8 o superior instalado.
-2. Clona este repositorio:
-   git clone https://github.com/miltonials/crautos-scraper.git
-   cd crautos-scraper
-3. Instala las dependencias necesarias:
-   pip install httpx beautifulsoup4 pandas nest-asyncio
+This project was created **strictly for educational and research purposes**.
 
-## Instrucciones de Uso
+- It is **not intended for denial-of-service attacks (DDoS)** or server overload.
+- The author is **not responsible for misuse** of this software.
+- Users must respect the **Terms of Service of the target website**.
+- **Commercial use of this code or extracted data is prohibited.**
 
-El scraper puede ejecutarse de dos maneras: a través de la terminal (script tradicional) o mediante un entorno interactivo como Jupyter Notebook / Google Colab.
+When using this scraper, please apply **reasonable rate limits**.
 
-Opción A: Uso en Terminal (Script .py)
-1. Guarda el código principal en un archivo llamado `scraper.py`.
-2. Al final de tu archivo `scraper.py`, asegúrate de tener el bloque de ejecución estándar:
+---
 
-   if __name__ == "__main__":
-       import asyncio
-       asyncio.run(main())
+# Features
 
-3. Ejecuta el script desde tu terminal:
-   python scraper.py
-4. El programa imprimirá el progreso y generará un archivo `crautos_completo.csv` en la misma carpeta.
+## Asynchronous Scraping
 
-Opción B: Uso en Jupyter Notebook / Colab
-Dado que estos entornos ya corren un ciclo de eventos asíncrono de fondo, no puedes usar `asyncio.run()`. 
-1. Pega el código en una celda.
-2. Al final, llama a la función principal directamente con `await`:
+Uses:
 
-   await main()
+- `asyncio`
+- `httpx`
 
-3. Ejecuta la celda. El archivo CSV se guardará en el entorno virtual de tu notebook.
+to perform concurrent HTTP requests, significantly reducing scraping time.
 
-## Contribuciones
+---
 
-¡Las contribuciones son bienvenidas! Por favor, lee el archivo CONTRIBUTING.md para conocer los detalles sobre nuestro código de conducta y el proceso para enviarnos Pull Requests.
+## Structured Data Extraction
 
-## Licencia y Derechos de Autor
+Extracts information such as:
 
-Required Notice: Copyright (c) 2026 [Tu Nombre o Usuario de GitHub]
+- car name
+- model year
+- price in colones
+- price in dollars
+- vehicle specifications
+- equipment
 
-Este proyecto está licenciado bajo la PolyForm Noncommercial License 1.0.0. 
-Se permite el uso personal, educativo y de investigación. Queda estrictamente prohibido su uso comercial. Para más detalles, consulta el archivo LICENSE incluido en este repositorio o visita https://polyformproject.org/licenses/noncommercial/1.0.0.
+---
+
+## Automatic Data Cleaning
+
+The scraper converts textual numeric fields into numeric values.
+
+Example:
+
+```text
+"91,500 kms" → 91500
+```
+
+---
+
+## HTML Parsing
+
+Uses **BeautifulSoup** to extract structured information from the vehicle detail pages.
+
+---
+
+## Progress Monitoring
+
+Interactive progress bars using:
+
+```text
+tqdm
+```
+
+---
+
+## Data Export
+
+The final result is returned as a **pandas DataFrame**, allowing easy export to:
+
+- CSV
+- Excel
+- data analysis pipelines
+
+---
+
+# Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/miltonials/crautos-scraper.git
+cd crautos-scraper
+```
+
+Install dependencies:
+
+```bash
+pip install httpx beautifulsoup4 pandas nest-asyncio tqdm
+```
+
+Requirements:
+
+```text
+Python >= 3.8
+```
+
+---
+
+# Project Architecture
+
+The scraper is organized around two main components.
+
+## 1. Data Model
+
+A dataclass represents each car listing.
+
+```python
+@dataclass
+class Car:
+    id: str
+    link: str
+    name: str
+    year: int
+    CRC: Optional[float]
+    USD: Optional[float]
+```
+
+This structure stores the **base information extracted from search pages**.
+
+---
+
+## 2. Scraper Engine
+
+The main logic is implemented in:
+
+```text
+crautos-scrapper.py
+```
+
+Responsibilities include:
+
+- concurrent request management
+- parsing listing pages
+- parsing detail pages
+- data cleaning
+- dataset assembly
+
+---
+
+# Scraping Workflow
+
+The extraction process runs in **two phases**.
+
+---
+
+## Phase 1 — Listing Extraction
+
+For each search results page:
+
+1. Send POST request to:
+
+```text
+https://crautos.com/autosusados/searchresults.cfm
+```
+
+1. Extract car IDs and basic information.
+
+Output example:
+
+```text
+id
+name
+year
+price
+link
+```
+
+---
+
+## Phase 2 — Detail Extraction
+
+For each car found:
+
+1. Request:
+
+```text
+https://crautos.com/autosusados/extract.cfm?c=<car_id>
+```
+
+1. Extract detailed specifications such as:
+
+- mileage
+- engine
+- transmission
+- fuel type
+- equipment
+- notes
+
+---
+
+# Dataset Fields
+
+Typical dataset columns include:
+
+```text
+id
+link
+name
+year
+CRC
+USD
+kilometraje
+motor
+transmisión
+combustible
+equipamiento
+notas
+```
+
+Note: Some fields may vary depending on the vehicle listing.
+
+---
+
+# Concurrency and Rate Limiting
+
+The scraper uses a **semaphore-based concurrency limiter**.
+
+```python
+self.semaphore = asyncio.Semaphore(max_concurrent_requests)
+```
+
+Default value:
+
+```text
+max_concurrent_requests = 10
+```
+
+Recommended limits:
+
+| Requests | Description         |
+| :------- | :------------------ |
+| 5–10     | Safe                |
+| 10–20    | Moderate            |
+| 50+      | Risk of IP blocking |
+
+---
+
+# Usage
+
+Example execution script.
+
+```python
+import asyncio
+from scraper import CrAutosScraper
+async def main():
+    scraper = CrAutosScraper(max_concurrent_requests=10)
+    df = await scraper.run(total_pages=5)
+    print(df.head())
+    df.to_csv("crautos_dataset.csv", index=False)
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Run:
+
+```bash
+python scraper.py
+```
+
+---
+
+# Example Output
+
+| name           | year | CRC      | USD   |
+| :------------- | :--- | :------- | :---- |
+| Toyota Corolla | 2018 | 6800000  | 11500 |
+| Hyundai Tucson | 2020 | 10500000 | 19500 |
+
+---
+
+# Potential Applications
+
+This dataset can be used for:
+
+- vehicle price analysis
+- car market trends in Costa Rica
+- machine learning models for price prediction
+- economic research
+- automotive analytics
+
+---
+
+
+# License
+
+```text
+Copyright (c) 2026 Milton Barrera
+```
+
+Licensed under:
+
+**PolyForm Noncommercial License 1.0.0**
+
+Allowed:
+
+- personal use
+- academic research
+- education
+
+Not allowed:
+
+- commercial usage
+- resale of extracted datasets
+
+Full license:
+
+[https://polyformproject.org/licenses/noncommercial/1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
+
