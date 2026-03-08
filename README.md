@@ -263,6 +263,20 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+Example of an execution script for correctly reading accents in the Spanish language
+
+```python
+import asyncio
+from scraper import CrAutosScraper
+async def main():
+    scraper = CrAutosScraper(max_concurrent_requests=10)
+    df = await scraper.run(total_pages=5)
+    print(df.head())
+    df.to_csv("crautos_dataset.csv", index=False, encoding="utf-8-sig")
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 Run:
 
 ```bash
