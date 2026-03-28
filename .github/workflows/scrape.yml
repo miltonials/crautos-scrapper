@@ -1,0 +1,50 @@
+name: Scrape CrAutos Listings
+
+on:
+  workflow_dispatch:
+    inputs:
+      total_pages:
+        description: "Number of pages to scrape"
+        required: false
+        default: "3"
+        type: string
+      max_concurrent_requests:
+        description: "Max concurrent requests"
+        required: false
+        default: "5"
+        type: string
+
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        run: python run_scraper.py
+        env:
+          TOTAL_PAGES: ${{ inputs.total_pages || '3' }}
+          MAX_CONCURRENT: ${{ inputs.max_concurrent_requests || '5' }}
+
+      - name: Upload dataset
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: crautos-dataset-${{ github.run_id }}
+          path: crautos_dataset.csv
+          retention-days: 30
