@@ -146,19 +146,78 @@ class CrAutosScraper:
                     data['Equipamiento'] = ", ".join(items)
 
             except Exception:
-                pass 
+                pass
 
         return data
+
+    def _unify_mileage(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Llena los vacíos entre las columnas de KMS y Millas haciendo la conversión."""
+
+        kms_col = 'Kilometraje (kms)'
+
+        # 1. Detectar dinámicamente el nombre de la columna de millas
+        mls_col = 'Kilometraje (millas)' # Valor por defecto
+        for col in df.columns:
+            if 'kilometraje' in col.lower() and any(x in col.lower() for x in ['millas', 'mls', 'mi']):
+                mls_col = col
+                break
+
+        # 2. Asegurarnos de que las columnas existan en el DataFrame
+        if kms_col not in df.columns:
+            df[kms_col] = pd.NA
+        if mls_col not in df.columns:
+            df[mls_col] = pd.NA
+
+        # 3. Forzar los tipos a numéricos (los textos raros se vuelven NaN)
+        df[kms_col] = pd.to_numeric(df[kms_col], errors='coerce')
+        df[mls_col] = pd.to_numeric(df[mls_col], errors='coerce')
+
+        # 4. Hacer la conversión cruzada
+        # Si kms está vacío, toma millas * 1.60934
+        df[kms_col] = df[kms_col].fillna(df[mls_col] * 1.60934)
+        # Si millas está vacío, toma kms / 1.60934
+        df[mls_col] = df[mls_col].fillna(df[kms_col] / 1.60934)
+
+        # Opcional: Si quieres que los carros que no traen NADA de kilometraje
+        # queden en 0 en lugar de NaN, descomenta las siguientes dos líneas:
+        df[kms_col] = df[kms_col].fillna(0)
+        df[mls_col] = df[mls_col].fillna(0)
+
+        return df
+
+    def _add_weighted_filter(self, df: pd.DataFrame, weights: dict) -> pd.DataFrame:
+        filtered_df = df.copy()[weights.keys()]
+        filtered_df = filtered_df.dropna()
+        print(filtered_df)
+
+        for key, value in weights.items():
+            filtered_df[key] = filtered_df[key] * value
+            filtered_df['score'] = filtered_df.sum(axis=1)
+
+        cols = list(filtered_df.columns)
+        cols = cols[-1:] + cols[:-1]
+        filtered_df = filtered_df[cols]
+        filtered_df = filtered_df.sort_values(by=['score'], ascending=False)
+        return df.sort_values
+
+    def _normalize_numeric_columns(self, df: pd.DataFrame, columns_to_normalize: list[str]) -> pd.DataFrame:
+        for col in columns_to_normalize:
+            # Validación rápida para evitar romper si la columna es completamente NaN
+            if col in df.columns and not df[col].isna().all():
+                df[col] = df[col].astype(float)
+                normalized_col = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+                df.insert(df.columns.get_loc(col) + 1, f"{col}_normalized", normalized_col)
+        return df
 
     async def run(self, total_pages: int):
         async with httpx.AsyncClient(headers=self.headers) as client:
             print(f"\n[FASE 1/2] Obteniendo lista base de carros ({total_pages} páginas)...")
             tasks = [self.fetch_page(client, p) for p in range(1, total_pages + 1)]
-            
+
             pages_results = []
             for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Páginas Procesadas"):
                 pages_results.append(await f)
-                
+
             all_cars = [car for sublist in pages_results for car in sublist]
 
             if not all_cars:
@@ -167,9 +226,14 @@ class CrAutosScraper:
 
             print(f"\n[FASE 2/2] Se encontraron {len(all_cars)} carros. Extrayendo especificaciones detalladas...")
             detail_tasks = [self.fetch_car_details(client, car) for car in all_cars]
-            
+
             detailed_cars = []
             for f in tqdm(asyncio.as_completed(detail_tasks), total=len(detail_tasks), desc="Carros Extraídos"):
                 detailed_cars.append(await f)
 
-            return pd.DataFrame(detailed_cars)
+            result = pd.DataFrame(detailed_cars)
+            result = self._unify_mileage(result)
+
+            result = self._normalize_numeric_columns(result, ['year', 'CRC', 'Kilometraje (kms)'])
+
+            return result
