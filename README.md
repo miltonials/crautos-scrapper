@@ -1,5 +1,7 @@
 # crautos-scraper
 
+[![Download Latest Dataset](https://img.shields.io/badge/Download-Latest%20Dataset-blue)](https://github.com/miltonials/crautos-scrapper/releases/latest/download/crautos_dataset.csv)
+
 Async Python scraper for extracting structured data about used cars in **Costa Rica** from **crautos.com**.
 
 This project collects listings from the public catalog and extracts structured vehicle information that can be exported to **CSV or pandas DataFrames** for analysis.

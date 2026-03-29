@@ -17,6 +17,9 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
+permissions:
+  contents: write
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -48,3 +51,14 @@ jobs:
           name: crautos-dataset-${{ github.run_id }}
           path: crautos_dataset.csv
           retention-days: 30
+
+      - name: Publish to latest release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest crautos_dataset.csv \
+            --title "Latest CrAutos Dataset" \
+            --notes "Auto-generated on $(date -u '+%Y-%m-%d %H:%M UTC') from workflow run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+            --latest
