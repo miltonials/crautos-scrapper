@@ -9,7 +9,6 @@ from tqdm.auto import tqdm
 
 from crautos_scrapper.models import Car
 
-
 YEAR_WEIGHT = 1
 CRC_WEIGHT = -1
 MILEAGE_WEIGHT = -1
