@@ -10,6 +10,11 @@ from tqdm.auto import tqdm
 from crautos_scrapper.models import Car
 
 
+YEAR_WEIGHT = 1
+CRC_WEIGHT = -1
+MILEAGE_WEIGHT = -1
+
+
 class CrAutosScraper:
     def __init__(self, max_concurrent_requests: int = 10):
         self.base_url = "https://crautos.com/autosusados/searchresults.cfm?c=03037"
@@ -236,5 +241,14 @@ class CrAutosScraper:
             result = self._unify_mileage(result)
 
             result = self._normalize_numeric_columns(result, ["year", "CRC", "Kilometraje (kms)"])
+
+            score = (
+                result["year_normalized"] * YEAR_WEIGHT
+                + result["CRC_normalized"] * CRC_WEIGHT
+                + result["Kilometraje (kms)_normalized"] * MILEAGE_WEIGHT
+            )
+            name_idx = result.columns.get_loc("name")
+            result.insert(name_idx + 1, "score", score)
+            result = result.sort_values(by="score", ascending=False)
 
             return result
