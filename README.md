@@ -97,13 +97,20 @@ cd crautos-scraper
 Install dependencies:
 
 ```bash
-pip install httpx beautifulsoup4 pandas nest-asyncio tqdm
+pip install -e .
+```
+
+For development (includes ruff, pytest, pre-commit):
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
 ```
 
 Requirements:
 
 ```text
-Python >= 3.8
+Python >= 3.10
 ```
 
 ---
@@ -133,10 +140,14 @@ This structure stores the **base information extracted from search pages**.
 
 ## 2. Scraper Engine
 
-The main logic is implemented in:
+The main logic is organized as a Python package:
 
 ```text
-crautos-scrapper.py
+src/crautos_scrapper/
+├── __init__.py    # Public API
+├── models.py      # Car dataclass
+├── scraper.py     # CrAutosScraper class
+└── __main__.py    # CLI entry point
 ```
 
 Responsibilities include:
@@ -253,34 +264,45 @@ Example execution script.
 
 ```python
 import asyncio
-from scraper import CrAutosScraper
-async def main():
-    scraper = CrAutosScraper(max_concurrent_requests=10)
-    df = await scraper.run(total_pages=5)
-    print(df.head())
-    df.to_csv("crautos_dataset.csv", index=False)
-if __name__ == "__main__":
-    asyncio.run(main())
-```
+from crautos_scrapper import CrAutosScraper
 
-Example of an execution script for correctly reading accents in the Spanish language
-
-```python
-import asyncio
-from scraper import CrAutosScraper
 async def main():
     scraper = CrAutosScraper(max_concurrent_requests=10)
     df = await scraper.run(total_pages=5)
     print(df.head())
     df.to_csv("crautos_dataset.csv", index=False, encoding="utf-8-sig")
+
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Run:
+Run via CLI:
 
 ```bash
-python scraper.py
+python -m crautos_scrapper
+```
+
+Configure via environment variables:
+
+```bash
+TOTAL_PAGES=5 MAX_CONCURRENT=10 python -m crautos_scrapper
+```
+
+---
+
+# Development
+
+Run linter and formatter:
+
+```bash
+ruff check src/ tests/
+ruff format src/ tests/
+```
+
+Run tests:
+
+```bash
+pytest
 ```
 
 ---
