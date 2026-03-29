@@ -164,7 +164,37 @@ Responsibilities include:
 
 # Scraping Workflow
 
-The extraction process runs in **two phases**.
+The extraction process runs in **two phases**, followed by post-processing.
+
+```mermaid
+flowchart TD
+    A["Start: run(total_pages)"] --> B["Phase 1 — Listing Extraction"]
+
+    B --> C["For each page 1..N\n(concurrent POST requests)"]
+    C --> D["POST crautos.com/autosusados/\nsearchresults.cfm"]
+    D --> E["Parse HTML → extract\ncar IDs, names, years, prices"]
+    E --> F["Collect all Car objects"]
+
+    F --> G["Phase 2 — Detail Extraction"]
+
+    G --> H["For each car\n(concurrent GET requests)"]
+    H --> I["GET crautos.com/autosusados/\nextract.cfm?c=car_id"]
+    I --> J["Parse general info (tab-1)\n+ equipment (tab-2)"]
+    J --> K["Collect detailed car data"]
+
+    K --> L["Post-Processing"]
+
+    L --> M["Build DataFrame"]
+    M --> N["Unify mileage\n(kms ↔ miles conversion)"]
+    N --> O["Normalize columns\n(year, CRC, mileage)"]
+    O --> P["Compute score\n(weighted sum)"]
+    P --> Q["Sort by score ↓"]
+    Q --> R["Return DataFrame"]
+
+    style B fill:#2d6a4f,color:#fff
+    style G fill:#2d6a4f,color:#fff
+    style L fill:#2d6a4f,color:#fff
+```
 
 ---
 
@@ -221,10 +251,14 @@ Typical dataset columns include:
 id
 link
 name
+score
 year
+year_normalized
 CRC
+CRC_normalized
 USD
-kilometraje
+Kilometraje (kms)
+Kilometraje (kms)_normalized
 motor
 transmisión
 combustible
@@ -233,6 +267,26 @@ notas
 ```
 
 Note: Some fields may vary depending on the vehicle listing.
+
+---
+
+# Vehicle Scoring
+
+Each listing receives a **score** based on a weighted combination of normalized values:
+
+```text
+score = year_normalized × 1 + CRC_normalized × (−1) + mileage_normalized × (−1)
+```
+
+| Factor  | Weight | Effect                        |
+| :------ | :----- | :---------------------------- |
+| Year    | +1     | Newer vehicles score higher   |
+| Price   | −1     | Cheaper vehicles score higher |
+| Mileage | −1     | Lower mileage scores higher   |
+
+Normalization uses min-max scaling per column. Results are **sorted by score in descending order**, so the best value vehicles appear first.
+
+The weights can be adjusted by modifying the constants `YEAR_WEIGHT`, `CRC_WEIGHT`, and `MILEAGE_WEIGHT` in `scraper.py`.
 
 ---
 
@@ -311,10 +365,10 @@ pytest
 
 # Example Output
 
-| name           | year | CRC      | USD   |
-| :------------- | :--- | :------- | :---- |
-| Toyota Corolla | 2018 | 6800000  | 11500 |
-| Hyundai Tucson | 2020 | 10500000 | 19500 |
+| name           | score | year | CRC      | USD   |
+| :------------- | :---- | :--- | :------- | :---- |
+| Toyota Corolla | 1.85  | 2018 | 6800000  | 11500 |
+| Hyundai Tucson | 1.20  | 2020 | 10500000 | 19500 |
 
 ---
 
